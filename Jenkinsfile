@@ -4,7 +4,6 @@ pipeline {
     environment {
         SHORT_COMMIT   = "${env.GIT_COMMIT.take(7)}"
         DOCKER_IMAGE   = "shabaz7323/sample-node-app:${SHORT_COMMIT}"
-        DOCKER_REGISTRY = "docker.io"
         K8S_DEPLOYMENT = "sample-node-app-deployment"
         K8S_NAMESPACE  = "default"
     }
@@ -19,8 +18,8 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh """
-                    echo "Building image: ${DOCKER_IMAGE}"
+                bat """
+                    echo Building image: ${DOCKER_IMAGE}
                     docker build -t ${DOCKER_IMAGE} .
                 """
             }
@@ -28,15 +27,17 @@ pipeline {
 
         stage('Unit Tests') {
             steps {
-                sh "npm --prefix app test || true"
+                bat "npm --prefix app test || exit 0"
             }
         }
 
         stage('Push Image to Docker Hub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
-                    sh """
-                        echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
+                        usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
+
+                    bat """
+                        echo %DOCKERHUB_PASS% | docker login -u %DOCKERHUB_USER% --password-stdin
                         docker push ${DOCKER_IMAGE}
                     """
                 }
@@ -46,19 +47,13 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                    sh """
-                        export KUBECONFIG=${KUBECONFIG_FILE}
-                        
-                        echo "Updating Kubernetes deployment..."
 
-                        kubectl set image deployment/${K8S_DEPLOYMENT} \
-                            sample-node-app=${DOCKER_IMAGE} \
-                            --namespace=${K8S_NAMESPACE} || true
-                        
-                        kubectl apply -f k8s/
-
-                        kubectl rollout status deployment/${K8S_DEPLOYMENT} \
-                            --namespace=${K8S_NAMESPACE}
+                    // Windows PowerShell commands for kubectl
+                    powershell """
+                        \$env:KUBECONFIG='${KUBECONFIG_FILE}'
+                        kubectl apply -f k8s
+                        kubectl set image deployment/${K8S_DEPLOYMENT} sample-node-app=${DOCKER_IMAGE} -n ${K8S_NAMESPACE}
+                        kubectl rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE}
                     """
                 }
             }
@@ -67,7 +62,7 @@ pipeline {
 
     post {
         always {
-            sh "docker image prune -f || true"
+            bat "docker image prune -f"
         }
     }
 }
