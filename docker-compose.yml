@@ -1,0 +1,7 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    image: shabaz7323/sample-node-app:local
+    ports:
+      - '3000:3000'
